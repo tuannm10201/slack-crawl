@@ -16,6 +16,26 @@ app.use(express.json());
 // Cache variable to store user information
 const userCache = new Map();
 
+// Cache for team info
+let teamInfo = null;
+
+// Function to get team info
+async function getTeamInfo() {
+  if (teamInfo) return teamInfo;
+
+  try {
+    const result = await slack.auth.test();
+    teamInfo = {
+      id: result.team_id,
+      domain: result.team_domain || result.team, // team_domain is the workspace name
+    };
+    return teamInfo;
+  } catch (error) {
+    console.error("Error fetching team info:", error);
+    return null;
+  }
+}
+
 // Route to handle events from Slack
 app.post("/slack/events", async (req, res) => {
   const { type, challenge, event } = req.body;
@@ -196,24 +216,19 @@ app.get("/users/:channelId", async (req, res) => {
   }
 });
 
-// Route to crawl messages from a channel
-app.get("/crawl/:channelId", async (req, res) => {
-  const { channelId } = req.params;
-  const { limit, oldest, latest, inclusive, cursor } = req.query;
-
+// Helper function to fetch thread replies
+async function fetchThreadReplies(channelId, threadTs) {
   try {
-    // Call conversations.history API with filters
-    const result = await slack.conversations.history({
+    const result = await slack.conversations.replies({
       channel: channelId,
-      limit: parseInt(limit) || 100,
-      oldest: oldest || undefined,
-      latest: latest || undefined,
-      inclusive: inclusive === "true",
-      cursor: cursor || undefined,
+      ts: threadTs,
     });
 
-    // Map messages and add user information from cache
-    const messages = result.messages.map((msg) => {
+    // Get team info for message links
+    const team = await getTeamInfo();
+    const workspaceName = team?.domain || "";
+
+    return result.messages.map((msg) => {
       const userInfo = userCache.get(msg.user) || {
         id: msg.user,
         name: "Unknown",
@@ -226,12 +241,81 @@ app.get("/crawl/:channelId", async (req, res) => {
         team_id: null,
       };
 
+      // Convert timestamp to Slack message ID format
+      const messageId = msg.ts.replace(".", "");
+      const slackLink = `https://${workspaceName}.slack.com/archives/${channelId}/p${messageId}`;
+
       return {
         user: userInfo,
         text: msg.text,
         timestamp: msg.ts,
+        thread_ts: msg.thread_ts,
+        is_thread_reply: true,
+        slack_link: slackLink,
       };
     });
+  } catch (error) {
+    console.error(`Error fetching thread replies for ${threadTs}:`, error);
+    return [];
+  }
+}
+
+// Route to crawl messages from a channel
+app.get("/crawl/:channelId", async (req, res) => {
+  const { channelId } = req.params;
+  const { limit, oldest, latest, inclusive, cursor } = req.query;
+
+  try {
+    // Get team info for message links
+    const team = await getTeamInfo();
+    const workspaceName = team?.domain || "";
+
+    // Call conversations.history API with filters
+    const result = await slack.conversations.history({
+      channel: channelId,
+      limit: parseInt(limit) || 100,
+      oldest: oldest || undefined,
+      latest: latest || undefined,
+      inclusive: inclusive === "true",
+      cursor: cursor || undefined,
+    });
+
+    // Process messages and fetch thread replies
+    const messages = await Promise.all(
+      result.messages.map(async (msg) => {
+        const userInfo = userCache.get(msg.user) || {
+          id: msg.user,
+          name: "Unknown",
+          real_name: "Unknown",
+          display_name: "Unknown",
+          email: null,
+          avatar: null,
+          is_bot: false,
+          is_admin: false,
+          team_id: null,
+        };
+
+        // Convert timestamp to Slack message ID format
+        const messageId = msg.ts.replace(".", "");
+        const slackLink = `https://${workspaceName}.slack.com/archives/${channelId}/p${messageId}`;
+
+        const messageData = {
+          user: userInfo,
+          text: msg.text,
+          timestamp: msg.ts,
+          thread_ts: msg.thread_ts,
+          is_thread_reply: false,
+          slack_link: slackLink,
+        };
+
+        // If this message has thread replies, fetch them
+        if (msg.reply_count > 0) {
+          messageData.replies = await fetchThreadReplies(channelId, msg.ts);
+        }
+
+        return messageData;
+      })
+    );
 
     res.json({
       success: true,
