@@ -37,122 +37,122 @@ async function getTeamInfo() {
 }
 
 // Route to handle events from Slack
-app.post("/slack/events", async (req, res) => {
-  const { type, challenge, event } = req.body;
+// app.post("/slack/events", async (req, res) => {
+//   const { type, challenge, event } = req.body;
 
-  // Verify URL with Slack
-  if (type === "url_verification") {
-    return res.json({ challenge });
-  }
+//   // Verify URL with Slack
+//   if (type === "url_verification") {
+//     return res.json({ challenge });
+//   }
 
-  // Handle events from Slack
-  if (type === "event_callback" && event) {
-    try {
-      // New message event
-      if (event.type === "message" && !event.subtype) {
-        // Retrieve user information (optional)
-        const userInfo = await slack.users.info({ user: event.user });
-        const userName = userInfo.user?.name || "Unknown";
+//   // Handle events from Slack
+//   if (type === "event_callback" && event) {
+//     try {
+//       // New message event
+//       if (event.type === "message" && !event.subtype) {
+//         // Retrieve user information (optional)
+//         const userInfo = await slack.users.info({ user: event.user });
+//         const userName = userInfo.user?.name || "Unknown";
 
-        // Retrieve channel information (optional)
-        const channelInfo = await slack.conversations.info({
-          channel: event.channel,
-        });
-        const channelName = channelInfo.channel?.name || "Unknown";
+//         // Retrieve channel information (optional)
+//         const channelInfo = await slack.conversations.info({
+//           channel: event.channel,
+//         });
+//         const channelName = channelInfo.channel?.name || "Unknown";
 
-        // Log new message
-        console.log(
-          `New message in #${channelName} from ${userName}: ${event.text}`
-        );
+//         // Log new message
+//         console.log(
+//           `New message in #${channelName} from ${userName}: ${event.text}`
+//         );
 
-        // Process the message (e.g., save to DB, send notification, etc.)
-        const messageData = {
-          channel: event.channel,
-          channelName,
-          user: event.user,
-          userName,
-          text: event.text,
-          timestamp: event.ts,
-        };
+//         // Process the message (e.g., save to DB, send notification, etc.)
+//         const messageData = {
+//           channel: event.channel,
+//           channelName,
+//           user: event.user,
+//           userName,
+//           text: event.text,
+//           timestamp: event.ts,
+//         };
 
-        // TODO: Add your logic (save to DB, call another API, etc.)
-        console.log("Message data:", messageData);
+//         // TODO: Add your logic (save to DB, call another API, etc.)
+//         console.log("Message data:", messageData);
 
-        return res.status(200).json({ success: true });
-      }
+//         return res.status(200).json({ success: true });
+//       }
 
-      // User joined channel event
-      if (event.type === "member_joined_channel") {
-        const { user: userId, channel: channelId } = event;
-        console.log(`User ${userId} joined channel ${channelId}`);
+//       // User joined channel event
+//       if (event.type === "member_joined_channel") {
+//         const { user: userId, channel: channelId } = event;
+//         console.log(`User ${userId} joined channel ${channelId}`);
 
-        // Retrieve user information
-        const userResult = await slack.users.info({ user: userId });
+//         // Retrieve user information
+//         const userResult = await slack.users.info({ user: userId });
 
-        if (userResult.ok) {
-          const user = userResult.user;
-          const userInfo = {
-            id: user.id,
-            name: user.name,
-            real_name: user.real_name,
-            display_name: user.profile.display_name || user.real_name,
-            email: user.profile.email || null,
-            avatar: user.profile.image_192 || null,
-            is_bot: user.is_bot,
-            is_admin: user.is_admin || false,
-            team_id: user.team_id,
-          };
+//         if (userResult.ok) {
+//           const user = userResult.user;
+//           const userInfo = {
+//             id: user.id,
+//             name: user.name,
+//             real_name: user.real_name,
+//             display_name: user.profile.display_name || user.real_name,
+//             email: user.profile.email || null,
+//             avatar: user.profile.image_192 || null,
+//             is_bot: user.is_bot,
+//             is_admin: user.is_admin || false,
+//             team_id: user.team_id,
+//           };
 
-          // Update userCache
-          userCache.set(user.id, userInfo);
-          console.log(`Updated userCache with user ${userId}`);
-        } else {
-          console.error(
-            `Error fetching info for user ${userId}:`,
-            userResult.error
-          );
-        }
+//           // Update userCache
+//           userCache.set(user.id, userInfo);
+//           console.log(`Updated userCache with user ${userId}`);
+//         } else {
+//           console.error(
+//             `Error fetching info for user ${userId}:`,
+//             userResult.error
+//           );
+//         }
 
-        return res.status(200).json({ success: true });
-      }
+//         return res.status(200).json({ success: true });
+//       }
 
-      // User profile change event
-      if (event.type === "user_change") {
-        const user = event.user;
-        const userId = user.id;
-        console.log(`User ${userId} changed their profile`);
+//       // User profile change event
+//       if (event.type === "user_change") {
+//         const user = event.user;
+//         const userId = user.id;
+//         console.log(`User ${userId} changed their profile`);
 
-        // Create userInfo from event data
-        const userInfo = {
-          id: user.id,
-          name: user.name,
-          real_name: user.real_name,
-          display_name: user.profile.display_name || user.real_name,
-          email: user.profile.email || null,
-          avatar: user.profile.image_192 || null,
-          is_bot: user.is_bot,
-          is_admin: user.is_admin || false,
-          team_id: user.team_id,
-        };
+//         // Create userInfo from event data
+//         const userInfo = {
+//           id: user.id,
+//           name: user.name,
+//           real_name: user.real_name,
+//           display_name: user.profile.display_name || user.real_name,
+//           email: user.profile.email || null,
+//           avatar: user.profile.image_192 || null,
+//           is_bot: user.is_bot,
+//           is_admin: user.is_admin || false,
+//           team_id: user.team_id,
+//         };
 
-        // Update userCache
-        userCache.set(user.id, userInfo);
-        console.log(`Updated userCache with new info for user ${userId}`);
+//         // Update userCache
+//         userCache.set(user.id, userInfo);
+//         console.log(`Updated userCache with new info for user ${userId}`);
 
-        return res.status(200).json({ success: true });
-      }
+//         return res.status(200).json({ success: true });
+//       }
 
-      // Ignore other events
-      return res.status(200).json({ success: true });
-    } catch (error) {
-      console.error("Error processing event:", error);
-      return res.status(500).json({ success: false, error: error.message });
-    }
-  }
+//       // Ignore other events
+//       return res.status(200).json({ success: true });
+//     } catch (error) {
+//       console.error("Error processing event:", error);
+//       return res.status(500).json({ success: false, error: error.message });
+//     }
+//   }
 
-  // Ignore invalid requests
-  res.status(200).json({ success: true });
-});
+//   // Ignore invalid requests
+//   res.status(200).json({ success: true });
+// });
 
 // Route to get the list of users in a channel
 app.get("/users/:channelId", async (req, res) => {
@@ -228,32 +228,74 @@ async function fetchThreadReplies(channelId, threadTs) {
     const team = await getTeamInfo();
     const workspaceName = team?.domain || "";
 
-    return result.messages.map((msg) => {
-      const userInfo = userCache.get(msg.user) || {
-        id: msg.user,
-        name: "Unknown",
-        real_name: "Unknown",
-        display_name: "Unknown",
-        email: null,
-        avatar: null,
-        is_bot: false,
-        is_admin: false,
-        team_id: null,
-      };
+    // Process each message in the thread
+    const replies = [];
+
+    for (const msg of result.messages) {
+      // Get user info from cache or fetch it
+      let userInfo = userCache.get(msg.user);
+
+      // If user info is not in cache, fetch it from Slack API
+      if (!userInfo && msg.user) {
+        try {
+          const userResult = await slack.users.info({ user: msg.user });
+          if (userResult.ok) {
+            const user = userResult.user;
+            userInfo = {
+              id: user.id,
+              name: user.name,
+              real_name: user.real_name,
+              display_name: user.profile.display_name || user.real_name,
+              email: user.profile.email || null,
+              avatar: user.profile.image_192 || null,
+              is_bot: user.is_bot,
+              is_admin: user.is_admin || false,
+              team_id: user.team_id,
+            };
+            // Update the cache
+            userCache.set(user.id, userInfo);
+          }
+        } catch (error) {
+          console.error(`Error fetching info for user ${msg.user}:`, error);
+        }
+      }
+
+      // If still no user info, use fallback
+      if (!userInfo) {
+        userInfo = {
+          id: msg.user,
+          name: "Unknown",
+          real_name: "Unknown",
+          display_name: "Unknown",
+          email: null,
+          avatar: null,
+          is_bot: false,
+          is_admin: false,
+          team_id: null,
+        };
+      }
+
+      // Format timestamp to hh:mm:ss
+      const date = new Date(parseFloat(msg.ts) * 1000);
+      const timeFormatted = date.toTimeString().split(" ")[0]; // Gets hh:mm:ss
 
       // Convert timestamp to Slack message ID format
       const messageId = msg.ts.replace(".", "");
       const slackLink = `https://${workspaceName}.slack.com/archives/${channelId}/p${messageId}`;
 
-      return {
-        user: userInfo,
-        text: msg.text,
-        timestamp: msg.ts,
-        thread_ts: msg.thread_ts,
-        is_thread_reply: true,
-        slack_link: slackLink,
-      };
-    });
+      // Only add the reply if it's not the parent message (first message in thread)
+      if (msg.ts !== threadTs) {
+        replies.push({
+          user_name:
+            userInfo.display_name || userInfo.real_name || userInfo.name,
+          time: timeFormatted,
+          content: msg.text,
+          slack_link: slackLink,
+        });
+      }
+    }
+
+    return replies;
   } catch (error) {
     console.error(`Error fetching thread replies for ${threadTs}:`, error);
     return [];
@@ -283,34 +325,76 @@ app.get("/crawl/:channelId", async (req, res) => {
     // Process messages and fetch thread replies
     const messages = await Promise.all(
       result.messages.map(async (msg) => {
-        const userInfo = userCache.get(msg.user) || {
-          id: msg.user,
-          name: "Unknown",
-          real_name: "Unknown",
-          display_name: "Unknown",
-          email: null,
-          avatar: null,
-          is_bot: false,
-          is_admin: false,
-          team_id: null,
-        };
+        // Get user info from cache or fetch it
+        let userInfo = userCache.get(msg.user);
+
+        // If user info is not in cache, fetch it from Slack API
+        if (!userInfo && msg.user) {
+          try {
+            const userResult = await slack.users.info({ user: msg.user });
+            if (userResult.ok) {
+              const user = userResult.user;
+              userInfo = {
+                id: user.id,
+                name: user.name,
+                real_name: user.real_name,
+                display_name: user.profile.display_name || user.real_name,
+                email: user.profile.email || null,
+                avatar: user.profile.image_192 || null,
+                is_bot: user.is_bot,
+                is_admin: user.is_admin || false,
+                team_id: user.team_id,
+              };
+              // Update the cache
+              userCache.set(user.id, userInfo);
+            }
+          } catch (error) {
+            console.error(`Error fetching info for user ${msg.user}:`, error);
+          }
+        }
+
+        // If still no user info, use fallback
+        if (!userInfo) {
+          userInfo = {
+            id: msg.user,
+            name: "Unknown",
+            real_name: "Unknown",
+            display_name: "Unknown",
+            email: null,
+            avatar: null,
+            is_bot: false,
+            is_admin: false,
+            team_id: null,
+          };
+        }
+
+        // Format timestamp to hh:mm:ss
+        const date = new Date(parseFloat(msg.ts) * 1000);
+        const timeFormatted = date.toTimeString().split(" ")[0]; // Gets hh:mm:ss
 
         // Convert timestamp to Slack message ID format
         const messageId = msg.ts.replace(".", "");
         const slackLink = `https://${workspaceName}.slack.com/archives/${channelId}/p${messageId}`;
 
+        // Only include the requested fields
         const messageData = {
-          user: userInfo,
-          text: msg.text,
-          timestamp: msg.ts,
-          thread_ts: msg.thread_ts,
-          is_thread_reply: false,
+          user_name:
+            userInfo.display_name || userInfo.real_name || userInfo.name,
+          time: timeFormatted,
+          content: msg.text,
           slack_link: slackLink,
         };
 
         // If this message has thread replies, fetch them
         if (msg.reply_count > 0) {
-          messageData.replies = await fetchThreadReplies(channelId, msg.ts);
+          const replies = await fetchThreadReplies(channelId, msg.ts);
+          // Only include the requested fields for replies
+          messageData.replies = replies.map((reply) => ({
+            user_name: reply.user_name,
+            time: reply.time,
+            content: reply.content,
+            slack_link: reply.slack_link,
+          }));
         }
 
         return messageData;
