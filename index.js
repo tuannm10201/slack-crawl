@@ -32,6 +32,18 @@ async function getTeamInfo(slack) {
   }
 }
 
+// Helper function to format timestamp
+function formatTimestamp(timestamp) {
+  const date = new Date(parseFloat(timestamp) * 1000);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
+
 // Route to get the list of users in a channel
 app.get("/users/:channelId", async (req, res) => {
   const { channelId } = req.params;
@@ -196,9 +208,8 @@ app.get("/crawl", async (req, res) => {
               };
             }
 
-            // Format timestamp to hh:mm:ss
-            const date = new Date(parseFloat(msg.ts) * 1000);
-            const timeFormatted = date.toTimeString().split(" ")[0]; // Gets hh:mm:ss
+            // Format timestamp with date
+            const timeFormatted = formatTimestamp(msg.ts);
 
             // Generate message link
             const messageLink = generateMessageLink(
@@ -216,7 +227,7 @@ app.get("/crawl", async (req, res) => {
             }
 
             // Format the message as a string with channel name and link
-            let messageString = `[${channelId}] ${timeFormatted} | ${
+            let messageString = `${timeFormatted} | ${
               userInfo.display_name || userInfo.real_name || userInfo.name
             } | ${messageText} | ${messageLink}`;
 
@@ -234,7 +245,9 @@ app.get("/crawl", async (req, res) => {
                   channelId,
                   reply.ts
                 );
-                return `        | ${reply.time} | ${reply.user_name} | ${reply.content} | ${replyLink}`;
+                return `        | ${formatTimestamp(reply.ts)} | ${
+                  reply.user_name
+                } | ${reply.content} | ${replyLink}`;
               });
               messageString += "\n" + replyStrings.join("\n");
             }
@@ -381,6 +394,66 @@ app.get("/channels", async (req, res) => {
     console.error("Error fetching channels:", error);
     res.status(500).json({
       error: error.message,
+    });
+  }
+});
+
+// Route to get all users
+app.get("/users", async (req, res) => {
+  const { token, email, name } = req.query;
+
+  if (!token) {
+    return res.status(400).json({
+      error: "Slack token is required",
+    });
+  }
+
+  try {
+    // Initialize Slack WebClient with token from query parameter
+    const slack = new WebClient(token);
+
+    // Get all users
+    const result = await slack.users.list();
+    if (!result.ok) {
+      return res.status(500).json({
+        error: "Failed to get users information",
+      });
+    }
+
+    // Format user information
+    let users = result.members.map((user) => ({
+      id: user.id,
+      name: user.name,
+      real_name: user.real_name,
+      display_name: user.profile.display_name || user.real_name,
+      email: user.profile.email || null,
+      avatar: user.profile.image_192 || null,
+    }));
+
+    // Filter by email if provided
+    if (email) {
+      users = users.filter(
+        (user) =>
+          user.email && user.email.toLowerCase().includes(email.toLowerCase())
+      );
+    }
+
+    // Filter by name if provided
+    if (name) {
+      users = users.filter(
+        (user) =>
+          user.name.toLowerCase().includes(name.toLowerCase()) ||
+          user.real_name.toLowerCase().includes(name.toLowerCase()) ||
+          user.display_name.toLowerCase().includes(name.toLowerCase())
+      );
+    }
+
+    res.json(users);
+  } catch (error) {
+    console.error("Error fetching users information:", error);
+    res.status(500).json({
+      error: error.message,
+      slack_error_code: error.data?.error || null,
     });
   }
 });
