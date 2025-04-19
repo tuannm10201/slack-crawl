@@ -94,109 +94,154 @@ app.get("/users/:channelId", async (req, res) => {
   }
 });
 
-// Route to crawl messages from a channel
-app.get("/crawl/:channelId", async (req, res) => {
-  const { channelId } = req.params;
-  const { limit, oldest, latest, inclusive, cursor, token } = req.query;
+// Route to crawl messages from multiple channels
+app.get("/crawl", async (req, res) => {
+  const { channels, limit, oldest, latest, inclusive, cursor, token } =
+    req.query;
 
   if (!token) {
     return res.status(400).json({
       error: "Slack token is required",
     });
   }
+
+  if (!channels) {
+    return res.status(400).json({
+      error:
+        "Channel IDs are required. Use comma-separated values for multiple channels",
+    });
+  }
+
   try {
     // Initialize Slack WebClient with token from query parameter
     const slack = new WebClient(token);
 
-    // Call conversations.history API with filters
-    const result = await slack.conversations.history({
-      channel: channelId,
-      limit: parseInt(limit) || 100,
-      oldest: oldest || undefined,
-      latest: latest || undefined,
-      inclusive: inclusive === "true",
-      cursor: cursor || undefined,
+    // Split channels string into array
+    const channelIds = channels.split(",");
+
+    // Fetch messages from all channels in parallel
+    const channelPromises = channelIds.map(async (channelId) => {
+      try {
+        // Call conversations.history API with filters
+        const result = await slack.conversations.history({
+          channel: channelId,
+          limit: parseInt(limit) || 100,
+          oldest: oldest || undefined,
+          latest: latest || undefined,
+          inclusive: inclusive === "true",
+          cursor: cursor || undefined,
+        });
+
+        // Process messages and fetch thread replies
+        const messages = await Promise.all(
+          result.messages.map(async (msg) => {
+            // Get user info from cache or fetch it
+            let userInfo = userCache.get(msg.user);
+
+            // If user info is not in cache, fetch it from Slack API
+            if (!userInfo && msg.user) {
+              try {
+                const userResult = await slack.users.info({ user: msg.user });
+                if (userResult.ok) {
+                  const user = userResult.user;
+                  userInfo = {
+                    id: user.id,
+                    name: user.name,
+                    real_name: user.real_name,
+                    display_name: user.profile.display_name || user.real_name,
+                    email: user.profile.email || null,
+                    avatar: user.profile.image_192 || null,
+                    is_bot: user.is_bot,
+                    is_admin: user.is_admin || false,
+                    team_id: user.team_id,
+                  };
+                  // Update the cache
+                  userCache.set(user.id, userInfo);
+                }
+              } catch (error) {
+                console.error(
+                  `Error fetching info for user ${msg.user}:`,
+                  error
+                );
+              }
+            }
+
+            // If still no user info, use fallback
+            if (!userInfo) {
+              userInfo = {
+                id: msg.user,
+                name: "Unknown",
+                real_name: "Unknown",
+                display_name: "Unknown",
+                email: null,
+                avatar: null,
+                is_bot: false,
+                is_admin: false,
+                team_id: null,
+              };
+            }
+
+            // Format timestamp to hh:mm:ss
+            const date = new Date(parseFloat(msg.ts) * 1000);
+            const timeFormatted = date.toTimeString().split(" ")[0]; // Gets hh:mm:ss
+
+            // Handle join messages
+            let messageText = msg.text;
+            if (msg.subtype === "channel_join") {
+              messageText = `${
+                userInfo.display_name || userInfo.real_name || userInfo.name
+              } has joined the channel`;
+            }
+
+            // Format the message as a string with channel name
+            let messageString = `[${channelId}] ${timeFormatted} | ${
+              userInfo.display_name || userInfo.real_name || userInfo.name
+            } | ${messageText}`;
+
+            // If this message has thread replies, fetch them
+            if (msg.reply_count > 0) {
+              const replies = await fetchThreadReplies(
+                channelId,
+                msg.ts,
+                slack
+              );
+              // Format replies as strings, aligned with root message's time
+              const replyStrings = replies.map(
+                (reply) =>
+                  `        | ${reply.time} | ${reply.user_name} | ${reply.content}`
+              );
+              messageString += "\n" + replyStrings.join("\n");
+            }
+
+            return messageString;
+          })
+        );
+
+        return {
+          channelId,
+          messages,
+        };
+      } catch (error) {
+        console.error(`Error crawling channel ${channelId}:`, error);
+        return {
+          channelId,
+          error: error.message,
+          messages: [],
+        };
+      }
     });
 
-    // Process messages and fetch thread replies
-    const messages = await Promise.all(
-      result.messages.map(async (msg) => {
-        // Get user info from cache or fetch it
-        let userInfo = userCache.get(msg.user);
+    // Wait for all channels to complete
+    const results = await Promise.all(channelPromises);
 
-        // If user info is not in cache, fetch it from Slack API
-        if (!userInfo && msg.user) {
-          try {
-            const userResult = await slack.users.info({ user: msg.user });
-            if (userResult.ok) {
-              const user = userResult.user;
-              userInfo = {
-                id: user.id,
-                name: user.name,
-                real_name: user.real_name,
-                display_name: user.profile.display_name || user.real_name,
-                email: user.profile.email || null,
-                avatar: user.profile.image_192 || null,
-                is_bot: user.is_bot,
-                is_admin: user.is_admin || false,
-                team_id: user.team_id,
-              };
-              // Update the cache
-              userCache.set(user.id, userInfo);
-            }
-          } catch (error) {
-            console.error(`Error fetching info for user ${msg.user}:`, error);
-          }
-        }
+    // Group messages by channel
+    const groupedMessages = results.reduce((acc, result) => {
+      acc[result.channelId] = result.messages;
+      return acc;
+    }, {});
 
-        // If still no user info, use fallback
-        if (!userInfo) {
-          userInfo = {
-            id: msg.user,
-            name: "Unknown",
-            real_name: "Unknown",
-            display_name: "Unknown",
-            email: null,
-            avatar: null,
-            is_bot: false,
-            is_admin: false,
-            team_id: null,
-          };
-        }
-
-        // Format timestamp to hh:mm:ss
-        const date = new Date(parseFloat(msg.ts) * 1000);
-        const timeFormatted = date.toTimeString().split(" ")[0]; // Gets hh:mm:ss
-
-        // Handle join messages
-        let messageText = msg.text;
-        if (msg.subtype === "channel_join") {
-          messageText = `${
-            userInfo.display_name || userInfo.real_name || userInfo.name
-          } has joined the channel`;
-        }
-
-        // Format the message as a string
-        let messageString = `${timeFormatted} | ${
-          userInfo.display_name || userInfo.real_name || userInfo.name
-        } | ${messageText}`;
-
-        // If this message has thread replies, fetch them
-        if (msg.reply_count > 0) {
-          const replies = await fetchThreadReplies(channelId, msg.ts, slack);
-          // Format replies as strings
-          const replyStrings = replies.map(
-            (reply) => `  ${reply.time} | ${reply.user_name} | ${reply.content}`
-          );
-          messageString += "\n" + replyStrings.join("\n");
-        }
-
-        return messageString;
-      })
-    );
-
-    // Return the array of message strings
-    res.json(messages);
+    // Return messages grouped by channel
+    res.json(groupedMessages);
   } catch (error) {
     console.error("Error crawling messages:", error);
     res.status(500).json({
@@ -284,7 +329,18 @@ async function fetchThreadReplies(channelId, threadTs, slack) {
 
 // Route to get the list of channels
 app.get("/channels", async (req, res) => {
+  const { token } = req.query;
+
+  if (!token) {
+    return res.status(400).json({
+      error: "Slack token is required",
+    });
+  }
+
   try {
+    // Initialize Slack WebClient with token from query parameter
+    const slack = new WebClient(token);
+
     const result = await slack.conversations.list({
       types: "public_channel,private_channel",
     });
@@ -294,14 +350,10 @@ app.get("/channels", async (req, res) => {
       name: channel.name,
     }));
 
-    res.json({
-      success: true,
-      channels,
-    });
+    res.json(channels);
   } catch (error) {
     console.error("Error fetching channels:", error);
     res.status(500).json({
-      success: false,
       error: error.message,
     });
   }
