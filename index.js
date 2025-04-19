@@ -94,7 +94,14 @@ app.get("/users/:channelId", async (req, res) => {
   }
 });
 
-// Route to crawl messages from multiple channels
+// Helper function to generate message link
+function generateMessageLink(teamDomain, channelId, timestamp) {
+  // Convert Slack timestamp to the format used in URLs
+  const urlTimestamp = timestamp.replace(".", "");
+  return `https://${teamDomain}.slack.com/archives/${channelId}/p${urlTimestamp}`;
+}
+
+// Route to crawl messages from channels
 app.get("/crawl", async (req, res) => {
   const { channels, limit, oldest, latest, inclusive, cursor, token } =
     req.query;
@@ -115,6 +122,14 @@ app.get("/crawl", async (req, res) => {
   try {
     // Initialize Slack WebClient with token from query parameter
     const slack = new WebClient(token);
+
+    // Get team info for message links
+    const teamInfo = await getTeamInfo(slack);
+    if (!teamInfo) {
+      return res.status(500).json({
+        error: "Failed to get team information",
+      });
+    }
 
     // Split channels string into array
     const channelIds = channels.split(",");
@@ -185,6 +200,13 @@ app.get("/crawl", async (req, res) => {
             const date = new Date(parseFloat(msg.ts) * 1000);
             const timeFormatted = date.toTimeString().split(" ")[0]; // Gets hh:mm:ss
 
+            // Generate message link
+            const messageLink = generateMessageLink(
+              teamInfo.domain,
+              channelId,
+              msg.ts
+            );
+
             // Handle join messages
             let messageText = msg.text;
             if (msg.subtype === "channel_join") {
@@ -193,10 +215,10 @@ app.get("/crawl", async (req, res) => {
               } has joined the channel`;
             }
 
-            // Format the message as a string with channel name
+            // Format the message as a string with channel name and link
             let messageString = `[${channelId}] ${timeFormatted} | ${
               userInfo.display_name || userInfo.real_name || userInfo.name
-            } | ${messageText}`;
+            } | ${messageText} | ${messageLink}`;
 
             // If this message has thread replies, fetch them
             if (msg.reply_count > 0) {
@@ -206,10 +228,14 @@ app.get("/crawl", async (req, res) => {
                 slack
               );
               // Format replies as strings, aligned with root message's time
-              const replyStrings = replies.map(
-                (reply) =>
-                  `        | ${reply.time} | ${reply.user_name} | ${reply.content}`
-              );
+              const replyStrings = replies.map((reply) => {
+                const replyLink = generateMessageLink(
+                  teamInfo.domain,
+                  channelId,
+                  reply.ts
+                );
+                return `        | ${reply.time} | ${reply.user_name} | ${reply.content} | ${replyLink}`;
+              });
               messageString += "\n" + replyStrings.join("\n");
             }
 
@@ -250,7 +276,7 @@ app.get("/crawl", async (req, res) => {
   }
 });
 
-// Helper function to fetch thread replies
+// Update fetchThreadReplies function to include message links
 async function fetchThreadReplies(channelId, threadTs, slack) {
   try {
     const result = await slack.conversations.replies({
@@ -262,6 +288,9 @@ async function fetchThreadReplies(channelId, threadTs, slack) {
     const replies = [];
 
     for (const msg of result.messages) {
+      // Skip the parent message
+      if (msg.ts === threadTs) continue;
+
       // Get user info from cache or fetch it
       let userInfo = userCache.get(msg.user);
 
@@ -309,15 +338,12 @@ async function fetchThreadReplies(channelId, threadTs, slack) {
       const date = new Date(parseFloat(msg.ts) * 1000);
       const timeFormatted = date.toTimeString().split(" ")[0]; // Gets hh:mm:ss
 
-      // Only add the reply if it's not the parent message (first message in thread)
-      if (msg.ts !== threadTs) {
-        replies.push({
-          user_name:
-            userInfo.display_name || userInfo.real_name || userInfo.name,
-          time: timeFormatted,
-          content: msg.text,
-        });
-      }
+      replies.push({
+        ts: msg.ts,
+        user_name: userInfo.display_name || userInfo.real_name || userInfo.name,
+        time: timeFormatted,
+        content: msg.text,
+      });
     }
 
     return replies;

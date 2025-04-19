@@ -1,0 +1,205 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "Slack Crawler API",
+    "description": "API for crawling Slack messages and channels",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Get Channels",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/channels?token={{slack_token}}",
+          "host": ["{{base_url}}"],
+          "path": ["channels"],
+          "query": [
+            {
+              "key": "token",
+              "value": "{{slack_token}}",
+              "description": "Slack API token"
+            }
+          ]
+        },
+        "description": "Retrieves all available channels in the workspace"
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/channels?token={{slack_token}}",
+              "host": ["{{base_url}}"],
+              "path": ["channels"],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{slack_token}}"
+                }
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": [
+            {
+              "id": "C123456",
+              "name": "general"
+            },
+            {
+              "id": "C789012",
+              "name": "random"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Crawl Messages",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/crawl?token={{slack_token}}&channels={{channel_ids}}&limit={{limit}}&oldest={{oldest}}&latest={{latest}}&inclusive={{inclusive}}&cursor={{cursor}}",
+          "host": ["{{base_url}}"],
+          "path": ["crawl"],
+          "query": [
+            {
+              "key": "token",
+              "value": "{{slack_token}}",
+              "description": "Slack API token"
+            },
+            {
+              "key": "channels",
+              "value": "{{channel_ids}}",
+              "description": "Comma-separated channel IDs"
+            },
+            {
+              "key": "limit",
+              "value": "{{limit}}",
+              "description": "Number of messages per channel (default: 100)"
+            },
+            {
+              "key": "oldest",
+              "value": "{{oldest}}",
+              "description": "Start time (Unix timestamp)"
+            },
+            {
+              "key": "latest",
+              "value": "{{latest}}",
+              "description": "End time (Unix timestamp)"
+            },
+            {
+              "key": "inclusive",
+              "value": "{{inclusive}}",
+              "description": "Include messages at exact timestamp (default: false)"
+            },
+            {
+              "key": "cursor",
+              "value": "{{cursor}}",
+              "description": "Pagination cursor"
+            }
+          ]
+        },
+        "description": "Retrieves messages from one or more channels"
+      },
+      "response": [
+        {
+          "name": "Success Response",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/crawl?token={{slack_token}}&channels={{channel_ids}}",
+              "host": ["{{base_url}}"],
+              "path": ["crawl"],
+              "query": [
+                {
+                  "key": "token",
+                  "value": "{{slack_token}}"
+                },
+                {
+                  "key": "channels",
+                  "value": "{{channel_ids}}"
+                }
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": {
+            "C123456": [
+              "10:30:15 | John Doe | Message from channel 1",
+              "10:32:45 | Bob Wilson | Message from channel 1",
+              "        | 10:33:00 | Alice Brown | Reply to Bob's message"
+            ],
+            "C789012": [
+              "10:31:20 | Jane Smith | Message from channel 2",
+              "10:34:00 | Mike Johnson | Another message from channel 2"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "slack_token",
+      "value": "xoxb-your-token",
+      "type": "string"
+    },
+    {
+      "key": "channel_ids",
+      "value": "C123456,C789012",
+      "type": "string"
+    },
+    {
+      "key": "limit",
+      "value": "100",
+      "type": "string"
+    },
+    {
+      "key": "oldest",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "latest",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "inclusive",
+      "value": "false",
+      "type": "string"
+    },
+    {
+      "key": "cursor",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
